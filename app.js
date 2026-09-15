@@ -205,8 +205,8 @@
     return true;
   }
   async function pushEnable() {
+    if (isIOS() && !isStandalone()) { toast('Ábrela desde el icono de la pantalla de inicio'); return; }
     if (!pushSupported()) { toast('Este navegador no soporta notificaciones'); return; }
-    if (isIOS() && !isStandalone()) { toast('Instala primero la app en la pantalla de inicio'); return; }
     if (PUSH_SERVER.includes('PENDIENTE')) { toast('El servidor de recordatorios aún no está configurado'); return; }
     const perm = await Notification.requestPermission();
     if (perm !== 'granted') { toast('Permiso de notificaciones denegado'); render(); return; }
@@ -248,10 +248,10 @@
   function reminderCardHTML() {
     const n = activeReminders().length;
     let status, actions;
-    if (!pushSupported()) {
+    if (isIOS() && !isStandalone()) {
+      status = 'Estás en Safari. En el iPhone las notificaciones solo funcionan abriendo la app desde su icono de la pantalla de inicio. Cierra esta pestaña y ábrela desde el icono; si aún no lo tienes, sigue los pasos de instalación de abajo.'; actions = '';
+    } else if (!pushSupported()) {
       status = 'Este navegador no soporta notificaciones push.'; actions = '';
-    } else if (isIOS() && !isStandalone()) {
-      status = 'En el iPhone las notificaciones solo funcionan con la app instalada en la pantalla de inicio. Instálala y vuelve aquí.'; actions = '';
     } else if (Notification.permission === 'denied') {
       status = 'Las notificaciones están bloqueadas. Actívalas en Ajustes → Notificaciones → Hábitos.'; actions = '';
     } else if (pushEnabled()) {
