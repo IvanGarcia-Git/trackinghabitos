@@ -1,5 +1,5 @@
 /* Service worker: app shell offline + actualización silenciosa (stale-while-revalidate) */
-const VERSION = 'habitos-v3';
+const VERSION = 'habitos-v4';
 const SHELL = [
   './',
   './index.html',
@@ -38,6 +38,34 @@ self.addEventListener('fetch', (e) => {
       if (res) return res;
       if (req.mode === 'navigate') return cache.match('./index.html');
       return new Response('', { status: 504 });
+    })
+  );
+});
+
+/* ---- Notificaciones push ---- */
+self.addEventListener('push', (e) => {
+  let data = {};
+  try { data = e.data ? e.data.json() : {}; } catch { data = { title: 'Hábitos', body: e.data ? e.data.text() : '' }; }
+  const title = data.title || 'Hábitos';
+  const options = {
+    body: data.body || '',
+    tag: data.tag || 'habitos',
+    renotify: true,
+    icon: './icons/icon-192.png',
+    badge: './icons/icon-192.png',
+    data: { url: data.url || self.registration.scope }
+  };
+  e.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const target = (e.notification.data && e.notification.data.url) || self.registration.scope;
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wins) => {
+      const open = wins.find((w) => w.url.startsWith(self.registration.scope));
+      if (open) return open.focus();
+      return self.clients.openWindow(target);
     })
   );
 });

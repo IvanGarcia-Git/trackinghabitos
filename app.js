@@ -14,6 +14,11 @@
     ['😴', 'Dormir antes de las 23:30'], ['🚫', 'Sin redes sociales'], ['🌅', 'Levantarme a las 6'], ['🙏', 'Agradecer 3 cosas']
   ];
   const TAB_TITLES = { hoy: 'Hoy', mes: 'Mes', progreso: 'Progreso', habitos: 'Hábitos' };
+  // Servidor de recordatorios (Cloudflare Worker en /push-worker) y clave pública VAPID
+  const PUSH_SERVER = 'https://habitos-push.PENDIENTE.workers.dev';
+  const VAPID_PUBLIC_KEY = 'BEqllgpIdstsqg6YWAN4JPQQXd6-NdTblYziVj7mvOKYky9YbPnuggz7EQbMP3sX90HU1BgjhX5bSu6JDqTWJ_4';
+  // Hora sugerida de recordatorio por hábito (se rellena en el formulario, desactivada hasta que el usuario la active)
+  const DEFAULT_REMINDER_TIMES = { 'ir al gym': '07:30', 'leer 15 minutos': '21:30', 'tracking de alimentación': '22:00', 'trabajar en foco 6 horas': '09:00', 'tomar creatina': '16:00' };
   // Hábitos iniciales: se crean la primera vez (solo los que no existan ya por nombre)
   const DEFAULT_HABITS = [
     { emoji: '💪', name: 'Ir al gym', color: '#5ce1d3' },
@@ -41,12 +46,21 @@
   function save() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
     catch (e) { toast('No se pudo guardar (almacenamiento lleno)'); }
+    schedulePushSync();
   }
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
+  const norm = (t) => String(t || '').trim().toLowerCase();
+  function ensureReminders() {
+    let changed = false;
+    state.habits.forEach((h) => {
+      if (!h.reminder || typeof h.reminder !== 'object') { h.reminder = { enabled: false, time: DEFAULT_REMINDER_TIMES[norm(h.name)] || '09:00' }; changed = true; }
+    });
+    if (changed) save();
+  }
+
   function seedDefaults() {
     if (state.seeded) return;
-    const norm = (t) => t.trim().toLowerCase();
     const existing = new Set(state.habits.map((h) => norm(h.name)));
     DEFAULT_HABITS.forEach((d) => {
       if (existing.has(norm(d.name))) return;
@@ -156,6 +170,98 @@
       <div class="label"><b>${MONTHS[ui.m]}</b><span>${ui.y}${isNow ? ' · mes actual' : ''}</span></div>
       <button class="icon-btn" data-action="nextMonth" aria-label="Mes siguiente"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
     </div>`;
+  }
+
+  /* ---------- Notificaciones push ---------- */
+  const pushSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  const pushEnabled = () => !!(state.push && state.push.enabled);
+  const activeReminders = () => activeHabits().filter((h) => h.reminder && h.reminder.enabled && h.reminder.time);
+  function urlBase64ToUint8Array(b64) {
+    const pad = '='.repeat((4 - (b64.length % 4)) % 4);
+    const raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+    return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
+  }
+  let pushSyncTimer = null;
+  function schedulePushSync() {
+    if (!pushEnabled()) return;
+    clearTimeout(pushSyncTimer);
+    pushSyncTimer = setTimeout(() => { pushSync().catch(() => {}); }, 1500);
+  }
+  async function pushSync(subJson) {
+    if (!pushEnabled() || !pushSupported()) return false;
+    const reg = await navigator.serviceWorker.ready;
+    const sub = subJson || (await reg.pushManager.getSubscription().then((x) => x && x.toJSON()));
+    if (!sub) return false;
+    const tk = todayKey();
+    const body = {
+      subscription: sub,
+      tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      today: tk,
+      doneToday: activeHabits().filter((h) => isChecked(h.id, tk)).map((h) => h.id),
+      reminders: activeReminders().map((h) => ({ habitId: h.id, title: h.name, emoji: h.emoji || '', time: h.reminder.time }))
+    };
+    const res = await fetch(`${PUSH_SERVER}/subscriptions/${state.push.id}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    if (!res.ok) throw new Error('sync ' + res.status);
+    return true;
+  }
+  async function pushEnable() {
+    if (!pushSupported()) { toast('Este navegador no soporta notificaciones'); return; }
+    if (isIOS() && !isStandalone()) { toast('Instala primero la app en la pantalla de inicio'); return; }
+    if (PUSH_SERVER.includes('PENDIENTE')) { toast('El servidor de recordatorios aún no está configurado'); return; }
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') { toast('Permiso de notificaciones denegado'); render(); return; }
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) });
+      state.push = { id: (state.push && state.push.id) || (crypto.randomUUID ? crypto.randomUUID() : uid() + uid()), enabled: true };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      await pushSync(sub.toJSON());
+      toast('Notificaciones activadas');
+    } catch (err) {
+      state.push = { ...(state.push || {}), enabled: false };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      toast('No se pudieron activar: ' + (err && err.message ? err.message : 'error'));
+    }
+    render();
+  }
+  async function pushDisable() {
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) await sub.unsubscribe();
+      if (state.push && state.push.id) await fetch(`${PUSH_SERVER}/subscriptions/${state.push.id}`, { method: 'DELETE' }).catch(() => {});
+    } catch (e) { /* nada */ }
+    state.push = { ...(state.push || {}), enabled: false };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    toast('Notificaciones desactivadas');
+    render();
+  }
+  async function pushTest() {
+    try {
+      await pushSync();
+      const res = await fetch(`${PUSH_SERVER}/subscriptions/${state.push.id}/test`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      toast(data.ok ? 'Prueba enviada, mira la notificación' : `No se pudo enviar (${data.status || res.status})`);
+    } catch (e) { toast('No se pudo contactar con el servidor'); }
+  }
+  function reminderCardHTML() {
+    const n = activeReminders().length;
+    let status, actions;
+    if (!pushSupported()) {
+      status = 'Este navegador no soporta notificaciones push.'; actions = '';
+    } else if (isIOS() && !isStandalone()) {
+      status = 'En el iPhone las notificaciones solo funcionan con la app instalada en la pantalla de inicio. Instálala y vuelve aquí.'; actions = '';
+    } else if (Notification.permission === 'denied') {
+      status = 'Las notificaciones están bloqueadas. Actívalas en Ajustes → Notificaciones → Hábitos.'; actions = '';
+    } else if (pushEnabled()) {
+      status = `<span class="pill on">Activadas</span> ${n ? `${n} recordatorio${n === 1 ? '' : 's'} programado${n === 1 ? '' : 's'}.` : 'Activa el recordatorio en cada hábito (botón editar) para elegir su hora.'}`;
+      actions = `<div class="grid-2" style="margin-top:12px"><button class="btn" data-action="testPush">Enviar prueba</button><button class="btn ghost" data-action="disablePush">Desactivar</button></div>`;
+    } else {
+      status = 'Recibe un aviso a la hora que elijas en cada hábito. Si ya lo has marcado ese día, no te avisa.';
+      actions = `<button class="btn primary block" style="margin-top:12px" data-action="enablePush">🔔 Activar notificaciones</button>`;
+    }
+    return `<div class="card"><div class="card-title">Recordatorios</div><p class="muted">${status}</p>${actions}</div>`;
   }
 
   /* ---------- Vistas ---------- */
@@ -329,7 +435,7 @@
     const standalone = isStandalone();
     const rowHTML = (h, i, arr) => `<div class="hrow ${h.archived ? 'archived' : ''}" style="--c:${h.color}">
       <span class="t-emoji">${esc(h.emoji || '✅')}</span>
-      <div style="flex:1;min-width:0"><div class="hname">${esc(h.name)}</div><div class="hgoal">${h.goal > 0 ? `Objetivo: ${h.goal} días/mes` : 'Objetivo: todos los días'}</div></div>
+      <div style="flex:1;min-width:0"><div class="hname">${esc(h.name)}</div><div class="hgoal">${h.goal > 0 ? `Objetivo: ${h.goal} días/mes` : 'Objetivo: todos los días'}${h.reminder && h.reminder.enabled ? ` · <span class="bell">🔔 ${esc(h.reminder.time)}</span>` : ''}</div></div>
       <div class="hactions">
         ${h.archived ? '' : `<button class="icon-btn" data-action="moveHabit" data-id="${h.id}" data-dir="-1" ${i === 0 ? 'disabled style="opacity:.3"' : ''} aria-label="Subir"><svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
         <button class="icon-btn" data-action="moveHabit" data-id="${h.id}" data-dir="1" ${i === arr.length - 1 ? 'disabled style="opacity:.3"' : ''} aria-label="Bajar"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12l7 7 7-7"/></svg></button>`}
@@ -340,6 +446,7 @@
       <button class="btn primary block" data-action="addHabit">+ Nuevo hábito</button>
       ${act.length ? `<div class="hlist">${act.map(rowHTML).join('')}</div>` : `<div class="card empty"><div class="big">📝</div><h2>Sin hábitos todavía</h2><p>Añade uno o elige una sugerencia.</p><div class="chips">${SUGGESTIONS.map(([e, n]) => `<button class="chip" data-action="quickAdd" data-emoji="${e}" data-name="${esc(n)}">${e} ${esc(n)}</button>`).join('')}</div></div>`}
       ${arch.length ? `<div class="card"><div class="card-title">Archivados</div><div class="hlist">${arch.map(rowHTML).join('')}</div></div>` : ''}
+      ${reminderCardHTML()}
       <div class="card">
         <div class="card-title">Tus datos</div>
         <p class="muted" style="margin-bottom:12px">Todo se guarda en este dispositivo. Exporta una copia para no perder nada si cambias de móvil.</p>
@@ -374,6 +481,14 @@
         </div>
         <div class="field"><div class="emojis">${EMOJIS.map((e) => `<button type="button" data-action="pickEmoji" data-emoji="${e}">${e}</button>`).join('')}</div></div>
         <div class="field"><label>Color</label><div class="swatches">${HABIT_COLORS.map((c) => `<label style="--c:${c}"><input type="radio" name="color" value="${c}" ${c === color ? 'checked' : ''}><i></i></label>`).join('')}</div></div>
+        <div class="field">
+          <label class="switch-row"><span>Recordatorio diario</span><span class="switch"><input type="checkbox" name="reminder" id="f-reminder" ${h?.reminder?.enabled ? 'checked' : ''}><i></i></span></label>
+          <div class="reminder-time" id="f-reminder-time" ${h?.reminder?.enabled ? '' : 'hidden'}>
+            <label for="f-time">Hora del aviso</label>
+            <input id="f-time" name="time" type="time" value="${esc(h?.reminder?.time || DEFAULT_REMINDER_TIMES[norm(h?.name)] || '09:00')}">
+            <span class="help">${pushEnabled() ? 'Te llegará una notificación a esa hora si aún no lo has marcado.' : 'Activa las notificaciones en la pestaña Hábitos para que lleguen los avisos.'}</span>
+          </div>
+        </div>
         <div class="field"><label for="f-goal">Objetivo (días al mes)</label><input id="f-goal" name="goal" type="number" inputmode="numeric" min="1" max="31" placeholder="Todos los días" value="${h?.goal > 0 ? h.goal : ''}"><span class="help">Déjalo vacío para todos los días del mes. Ej. 12 si vas al gym 3 veces por semana.</span></div>
         <div class="modal-actions">
           <button type="button" class="btn" data-action="closeModal">Cancelar</button>
@@ -408,8 +523,9 @@
   }
 
   /* ---------- Acciones ---------- */
-  function addHabit({ name, emoji, color, goal }) {
-    state.habits.push({ id: uid(), name: name.trim(), emoji: (emoji || '').trim(), color, goal: goal || 0, createdAt: todayKey(), archived: false });
+  function addHabit({ name, emoji, color, goal, reminder }) {
+    state.habits.push({ id: uid(), name: name.trim(), emoji: (emoji || '').trim(), color, goal: goal || 0, createdAt: todayKey(), archived: false,
+      reminder: reminder || { enabled: false, time: DEFAULT_REMINDER_TIMES[norm(name)] || '09:00' } });
     save();
   }
   function exportData() {
@@ -462,9 +578,12 @@
       for (const k of Object.keys(state.checks)) { delete state.checks[k][id]; if (!Object.keys(state.checks[k]).length) delete state.checks[k]; }
       save(); closeModal(); toast('Hábito eliminado'); render();
     },
+    enablePush() { pushEnable(); },
+    disablePush() { pushDisable(); },
+    testPush() { pushTest(); },
     export() { exportData(); },
     import() { $('#import-file').click(); },
-    confirmImport() { if (pendingImport) { state = pendingImport; pendingImport = null; save(); closeModal(); toast('Datos importados'); render(); } }
+    confirmImport() { if (pendingImport) { const push = state.push; state = pendingImport; state.push = push; pendingImport = null; ensureReminders(); save(); closeModal(); toast('Datos importados'); render(); } }
   };
 
   document.addEventListener('click', (e) => {
@@ -478,19 +597,29 @@
     if (e.target.id !== 'habit-form') return;
     e.preventDefault();
     const fd = new FormData(e.target);
-    const data = { name: String(fd.get('name') || ''), emoji: String(fd.get('emoji') || ''), color: String(fd.get('color') || HABIT_COLORS[0]), goal: Math.max(0, Math.min(31, parseInt(fd.get('goal'), 10) || 0)) };
+    const time = String(fd.get('time') || '');
+    const reminder = { enabled: !!fd.get('reminder') && /^\d\d:\d\d$/.test(time), time: /^\d\d:\d\d$/.test(time) ? time : '09:00' };
+    const data = { name: String(fd.get('name') || ''), emoji: String(fd.get('emoji') || ''), color: String(fd.get('color') || HABIT_COLORS[0]), goal: Math.max(0, Math.min(31, parseInt(fd.get('goal'), 10) || 0)), reminder };
     if (!data.name.trim()) return;
+    if (reminder.enabled && !pushEnabled() && pushSupported() && !(isIOS() && !isStandalone()) && Notification.permission !== 'denied') {
+      setTimeout(() => toast('Recuerda activar las notificaciones en Hábitos → Recordatorios'), 1200);
+    }
     const id = e.target.dataset.id;
-    if (id) { const h = state.habits.find((x) => x.id === id); if (h) Object.assign(h, { name: data.name.trim(), emoji: data.emoji.trim(), color: data.color, goal: data.goal }); save(); toast('Hábito guardado'); }
+    if (id) { const h = state.habits.find((x) => x.id === id); if (h) Object.assign(h, { name: data.name.trim(), emoji: data.emoji.trim(), color: data.color, goal: data.goal, reminder }); save(); toast('Hábito guardado'); }
     else { addHabit(data); toast('Hábito creado'); }
     closeModal(); render();
   });
+  document.addEventListener('change', (e) => {
+    if (e.target.id === 'f-reminder') { const box = $('#f-reminder-time'); if (box) box.hidden = !e.target.checked; }
+  });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && ui.modal) closeModal(); });
   // Volver a pintar al reabrir la app (cambio de día) y al volver de segundo plano
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { render(); schedulePushSync(); } });
 
   seedDefaults();
+  ensureReminders();
   render();
+  if (pushEnabled()) schedulePushSync();
 
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });

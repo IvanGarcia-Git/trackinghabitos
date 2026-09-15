@@ -1,0 +1,15 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "habitos-push",
+  "main": "src/index.js",
+  "compatibility_date": "2025-09-01",
+  "kv_namespaces": [
+    { "binding": "SUBS", "id": "REEMPLAZAR_CON_EL_ID_DEL_KV" }
+  ],
+  "triggers": { "crons": ["* * * * *"] },
+  "vars": {
+    "APP_URL": "https://ivangarcia-git.github.io/trackinghabitos/",
+    "VAPID_SUBJECT": "https://ivangarcia-git.github.io/trackinghabitos/",
+    "VAPID_PUBLIC_KEY": "BEqllgpIdstsqg6YWAN4JPQQXd6-NdTblYziVj7mvOKYky9YbPnuggz7EQbMP3sX90HU1BgjhX5bSu6JDqTWJ_4"
+  }
+}
