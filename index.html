@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+  <title>Hábitos</title>
+  <meta name="description" content="Rastreador de hábitos diario con progreso visual. Funciona sin conexión.">
+  <meta name="theme-color" content="#0b0d11">
+  <meta name="color-scheme" content="dark">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Hábitos">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark"></span><span id="topbar-title">Hoy</span></div>
+      <div class="topbar-right" id="topbar-right"></div>
+    </header>
+    <main id="view" class="view"></main>
+    <nav class="tabbar" aria-label="Secciones">
+      <button class="tab" data-action="tab" data-tab="hoy" aria-label="Hoy">
+        <svg viewBox="0 0 24 24"><path d="M9 12.5l2 2 4-4.5"/><rect x="3.5" y="4.5" width="17" height="16" rx="3"/><path d="M8 2.5v4M16 2.5v4"/></svg><span>Hoy</span>
+      </button>
+      <button class="tab" data-action="tab" data-tab="mes" aria-label="Mes">
+        <svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M3.5 9h17M9 3.5v17M15 3.5v17"/></svg><span>Mes</span>
+      </button>
+      <button class="tab" data-action="tab" data-tab="progreso" aria-label="Progreso">
+        <svg viewBox="0 0 24 24"><path d="M4 19h16"/><path d="M6 16v-5M11 16V7M16 16v-3M21 16V4" /></svg><span>Progreso</span>
+      </button>
+      <button class="tab" data-action="tab" data-tab="habitos" aria-label="Hábitos">
+        <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h10M4 17h13"/><circle cx="19" cy="16" r="3"/></svg><span>Hábitos</span>
+      </button>
+    </nav>
+  </div>
+  <div id="modal-root"></div>
+  <input type="file" id="import-file" accept="application/json,.json" hidden>
+  <script src="app.js"></script>
+</body>
+</html>
