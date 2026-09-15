@@ -15,7 +15,7 @@
   ];
   const TAB_TITLES = { hoy: 'Hoy', mes: 'Mes', progreso: 'Progreso', habitos: 'Hábitos' };
   // Servidor de recordatorios (Cloudflare Worker en /push-worker) y clave pública VAPID
-  const PUSH_SERVER = 'https://habitos-push.PENDIENTE.workers.dev';
+  const PUSH_SERVER = 'https://habitos-push.habitos-push-worker.workers.dev';
   const VAPID_PUBLIC_KEY = 'BEqllgpIdstsqg6YWAN4JPQQXd6-NdTblYziVj7mvOKYky9YbPnuggz7EQbMP3sX90HU1BgjhX5bSu6JDqTWJ_4';
   // Hora sugerida de recordatorio por hábito (se rellena en el formulario, desactivada hasta que el usuario la active)
   const DEFAULT_REMINDER_TIMES = { 'ir al gym': '07:30', 'leer 15 minutos': '21:30', 'tracking de alimentación': '22:00', 'trabajar en foco 6 horas': '09:00', 'tomar creatina': '16:00' };

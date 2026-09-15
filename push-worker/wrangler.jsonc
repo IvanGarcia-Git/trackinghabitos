@@ -4,7 +4,7 @@
   "main": "src/index.js",
   "compatibility_date": "2025-09-01",
   "kv_namespaces": [
-    { "binding": "SUBS", "id": "REEMPLAZAR_CON_EL_ID_DEL_KV" }
+    { "binding": "SUBS", "id": "d6568872f1184c5fbfa5cce6b968c545" }
   ],
   "triggers": { "crons": ["* * * * *"] },
   "vars": {
