@@ -1,5 +1,5 @@
 /* Service worker: app shell offline + actualización silenciosa (stale-while-revalidate) */
-const VERSION = 'habitos-v2';
+const VERSION = 'habitos-v3';
 const SHELL = [
   './',
   './index.html',

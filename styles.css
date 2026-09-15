@@ -170,6 +170,19 @@ svg { display: block; }
   font-weight: 700;
 }
 
+/* ===== Install banner (iOS sin instalar) ===== */
+.install-banner {
+  width: 100%; display: flex; align-items: center; gap: 12px; text-align: left;
+  padding: 12px 14px; border-radius: 16px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--aqua) 16%, var(--card)), var(--card));
+  border: 1px solid color-mix(in srgb, var(--aqua) 40%, var(--border));
+}
+.install-banner .ib-icon { font-size: 24px; flex: none; }
+.install-banner .ib-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.install-banner .ib-text b { font-size: 14px; }
+.install-banner .ib-text span { font-size: 12.5px; color: var(--muted); }
+.install-banner .ib-arrow { color: var(--aqua); font-size: 22px; flex: none; }
+
 /* ===== Stats tiles ===== */
 .stat { display: flex; flex-direction: column; gap: 2px; }
 .stat b { font-size: 24px; font-weight: 800; letter-spacing: -0.02em; line-height: 1; }

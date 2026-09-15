@@ -169,6 +169,17 @@
     </div>`;
   }
 
+  const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isStandalone = () => window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+  function installBanner() {
+    if (!isIOS() || isStandalone()) return '';
+    return `<button class="install-banner" data-action="tab" data-tab="habitos">
+      <span class="ib-icon">📲</span>
+      <span class="ib-text"><b>Instálala como app</b><span>Compartir → Añadir a pantalla de inicio, con "Abrir como app web" activado.</span></span>
+      <span class="ib-arrow">›</span>
+    </button>`;
+  }
+
   function viewHoy() {
     const habits = activeHabits();
     if (!habits.length) return emptyState();
@@ -187,6 +198,7 @@
         </div>
         ${donut(pct, { size: 96, stroke: 10, label: 'hoy' })}
       </section>
+      ${installBanner()}
       ${done === habits.length ? '<div class="all-done">🎉 Todos los hábitos de hoy completados. Sigue así.</div>' : ''}
       <ul class="today-list">
         ${habits.map((h) => {
@@ -314,7 +326,7 @@
 
   function viewHabitos() {
     const act = activeHabits(), arch = state.habits.filter((h) => h.archived);
-    const standalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+    const standalone = isStandalone();
     const rowHTML = (h, i, arr) => `<div class="hrow ${h.archived ? 'archived' : ''}" style="--c:${h.color}">
       <span class="t-emoji">${esc(h.emoji || '✅')}</span>
       <div style="flex:1;min-width:0"><div class="hname">${esc(h.name)}</div><div class="hgoal">${h.goal > 0 ? `Objetivo: ${h.goal} días/mes` : 'Objetivo: todos los días'}</div></div>
@@ -341,9 +353,10 @@
         <ol class="install-steps">
           <li><span class="n">1</span><span>Abre esta página en <b>Safari</b>.</span></li>
           <li><span class="n">2</span><span>Pulsa el botón <b>Compartir</b> (cuadrado con flecha).</span></li>
-          <li><span class="n">3</span><span>Elige <b>Añadir a pantalla de inicio</b> y confirma.</span></li>
+          <li><span class="n">3</span><span>Elige <b>Añadir a pantalla de inicio</b>.</span></li>
+          <li><span class="n">4</span><span>Comprueba que <b>"Abrir como app web"</b> está activado y pulsa Añadir.</span></li>
         </ol>
-        <p class="muted" style="margin-top:12px">Se abrirá como app a pantalla completa y funcionará sin conexión.</p>
+        <p class="muted" style="margin-top:12px">Si se abre con la barra de Safari, se guardó como marcador: borra el icono y repite los pasos desde Safari (no desde Chrome).</p>
       </div>`}
       <p class="muted" style="text-align:center">Hábitos · v1.0</p>`;
   }
